@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lexi — Your Study Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+  <style>
+    :root {
+      --bg: #06080f;
+      --surface: #0d1117;
+      --border: #1a2030;
+      --accent: #4f8ef7;
+      --accent2: #a78bfa;
+      --accent3: #34d399;
+      --text: #e8edf5;
+      --muted: #4a5568;
+      --glass-border: rgba(255,255,255,0.08);
+      --float-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      height: 100vh; overflow: hidden;
+      display: flex; flex-direction: column;
+      background-image:
+        radial-gradient(circle at 8% 20%, rgba(79,142,247,0.15) 0%, transparent 30%),
+        radial-gradient(circle at 88% 10%, rgba(167,139,250,0.12) 0%, transparent 25%),
+        radial-gradient(circle at 50% 120%, rgba(52,211,153,0.08) 0%, transparent 38%);
+    }
+    .header {
+      z-index: 10; display: flex; align-items: center;
+      justify-content: space-between; padding: 13px 26px;
+      border-bottom: 1px solid var(--glass-border);
+      background: rgba(13,17,23,0.78); backdrop-filter: blur(20px);
+      flex-shrink: 0;
+      box-shadow: var(--float-shadow);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-dot {
+      width:10px; height:10px; background: var(--accent3);
+      border-radius:50%; box-shadow: 0 0 12px var(--accent3);
+      animation: pdot 2s ease-in-out infinite;
+    }
+    @keyframes pdot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
+    .brand-name {
+      font-size:22px; font-weight:800; letter-spacing:-0.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      background-clip:text;
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .brand-tag { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; }
+    .header-right { display:flex; align-items:center; gap:10px; }
+    #mode-toggle {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--glass-border);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.03em;
+      border-radius: 10px;
+      padding: 8px 10px;
+      outline: none;
+      cursor: pointer;
+      min-width: 128px;
+      backdrop-filter: blur(20px);
+    }
+    #mode-toggle:focus { border-color: var(--accent); }
+    .status-pill {
+      display:flex; align-items:center; gap:7px; padding:6px 14px;
+      background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2);
+      border-radius:100px; font-size:12px; color:var(--accent3);
+      font-family:'JetBrains Mono',monospace; letter-spacing:0.05em; min-width:130px; justify-content:center;
+    }
+    .status-dot { width:6px; height:6px; background:var(--accent3); border-radius:50%; }
+    .settings-btn {
+      background:transparent; border: 1px solid var(--border); color:var(--muted);
+      width:36px; height:36px; border-radius:10px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:all 0.2s;
+    }
+    .settings-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .main { flex:1; display:grid; grid-template-columns:1fr 420px; overflow:hidden; }
+    .avatar-panel {
+      position:relative; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; overflow:hidden;
+      background: radial-gradient(ellipse at center, #091420 0%, var(--bg) 70%);
+    }
+    .avatar-panel::before {
+      content:''; position:absolute; bottom:0; left:0; right:0; height:45%;
+      background-image: linear-gradient(rgba(79,142,247,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,142,247,0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+      pointer-events:none;
+    }
+    #avatar-canvas { position:relative; z-index:1; cursor:pointer; display:block; }
+    .avatar-label {
+      position:absolute; bottom:22px; left:50%; transform:translateX(-50%);
+      font-family:'JetBrains Mono',monospace; font-size:11px;
+      letter-spacing:0.18em; color:var(--muted); z-index:2; white-space:nowrap;
+    }
+    .speaking-waves {
+      position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
+      display:flex; gap:4px; align-items:flex-end; height:24px;
+      z-index:2; opacity:0; transition:opacity 0.3s;
+    }
+    .speaking-waves.active { opacity:1; }
+    .speaking-waves span {
+      display:block; width:3px;
+      background: linear-gradient(to top, var(--accent), var(--accent2));
+      border-radius:2px; animation: wbar 0.7s ease-in-out infinite;
+    }
+    .speaking-waves span:nth-child(1){height:8px}
+    .speaking-waves span:nth-child(2){height:16px;animation-delay:0.1s}
+    .speaking-waves span:nth-child(3){height:24px;animation-delay:0.2s}
+    .speaking-waves span:nth-child(4){height:16px;animation-delay:0.3s}
+    .speaking-waves span:nth-child(5){height:8px;animation-delay:0.4s}
+    @keyframes wbar { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
+    .anim-hint {
+      position:absolute; top:18px; left:50%; transform:translateX(-50%);
+      font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted);
+      letter-spacing:0.08em; z-index:2; opacity:0; transition:opacity 0.5s; pointer-events:none;
+      background: rgba(13,17,23,0.8); padding: 6px 14px; border-radius:100px; border: 1px solid var(--border);
+    }
+    .anim-hint.show { opacity:1; }
+    .anim-controls {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 3;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      background: rgba(10, 16, 26, 0.75);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 6px;
+      backdrop-filter: blur(10px);
+    }
+    .anim-select {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      border-radius: 8px;
+      padding: 5px 8px;
+      min-width: 130px;
+      outline: none;
+    }
+    .anim-btn {
+      background: rgba(79,142,247,0.12);
+      border: 1px solid rgba(79,142,247,0.3);
+      color: #cfe0ff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      border-radius: 8px;
+      padding: 5px 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .anim-btn:hover:not(:disabled) { background: rgba(79,142,247,0.22); }
+    .anim-btn:disabled, .anim-select:disabled { opacity: 0.5; cursor: not-allowed; }
+    .loading-overlay {
+      position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      background:var(--bg); z-index:10; gap:16px; transition:opacity 0.6s;
+    }
+    .loading-overlay.hidden { opacity:0; pointer-events:none; }
+    .loader-ring {
+      width:48px; height:48px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius:50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .loader-text { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); letter-spacing:0.1em; }
+    /* Chat Panel */
+    .chat-panel {
+      display:flex; flex-direction:column;
+      border-left: 1px solid var(--glass-border);
+      background: rgba(13,17,23,0.72);
+      backdrop-filter: blur(20px);
+      overflow:hidden;
+      box-shadow: var(--float-shadow);
+    }
+    .chat-top {
+      padding:13px 18px; border-bottom: 1px solid var(--glass-border);
+      display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+    }
+    .chat-title { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; margin-bottom:4px; }
+    .topic-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.2);
+      color:var(--accent); padding:3px 10px; border-radius:100px;
+      font-size:11px; font-family:'JetBrains Mono',monospace; transition: all 0.3s;
+    }
+    .msg-count { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+    .messages {
+      flex:1; overflow-y:auto; padding:18px;
+      display:flex; flex-direction:column; gap:14px;
+      scrollbar-width:thin; scrollbar-color: var(--border) transparent;
+    }
+    .messages::-webkit-scrollbar{width:3px}
+    .messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    .message { display:flex; flex-direction:column; gap:4px; animation: msgin 0.25s ease forwards; }
+    @keyframes msgin { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .message.user{align-items:flex-end}
+    .message.lexi{align-items:flex-start}
+    .msg-label { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.08em; padding:0 4px; }
+    .msg-bubble { max-width:90%; padding:11px 15px; border-radius:16px; font-size:14px; line-height:1.65; white-space: pre-wrap; }
+    .message.user .msg-bubble { background: linear-gradient(135deg,var(--accent),#3b6fd4); color:#fff; border-bottom-right-radius:4px; }
+    .message.lexi .msg-bubble {
+      background: linear-gradient(150deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+      border: 1px solid var(--glass-border);
+      color:var(--text);
+      border-bottom-left-radius:4px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+    }
+    .thinking-bubble {
+      display:flex; gap:5px; align-items:center; padding:14px 18px;
+      background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:16px; border-bottom-left-radius:4px;
+    }
+    .thinking-bubble span {
+      display:block; width:7px; height:7px; background:var(--accent2);
+      border-radius:50%; animation: thnk 1.2s ease-in-out infinite;
+    }
+    .thinking-bubble span:nth-child(2){animation-delay:0.2s}
+    .thinking-bubble span:nth-child(3){animation-delay:0.4s}
+    @keyframes thnk { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+    .input-area {
+      padding:13px 18px;
+      border-top: 1px solid var(--glass-border);
+      display:flex;
+      flex-direction:column;
+      gap:9px;
+      flex-shrink:0;
+      background: rgba(13,17,23,0.6);
+      backdrop-filter: blur(20px);
+    }
+    .quick-prompts { display:flex; gap:5px; flex-wrap:wrap; }
+    .quick-btn {
+      background:transparent; border: 1px solid var(--border); color:var(--muted);
+      font-family:'Outfit',sans-serif; font-size:11px; padding:4px 10px;
+      border-radius:100px; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+    }
+    .quick-btn:hover { border-color:var(--accent); color:var(--accent); background:rgba(79,142,247,0.06); }
+    .file-upload {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    .study-tools {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tool-btn {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--glass-border);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      font-size: 12px;
+      padding: 7px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tool-btn:hover {
+      border-color: var(--accent2);
+      background: rgba(167,139,250,0.12);
+      transform: translateY(-1px);
+    }
+    .input-row { display:flex; gap:8px; align-items:flex-end; }
+    .chat-input {
+      flex:1; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:12px; color:var(--text); font-family:'Outfit',sans-serif;
+      font-size:14px; padding:11px 15px; resize:none; outline:none;
+      line-height:1.5; max-height:100px; transition:border-color 0.2s;
+    }
+    .chat-input:focus{border-color:var(--accent)}
+    .chat-input::placeholder{color:var(--muted)}
+    .send-btn {
+      width:42px; height:42px; background:var(--accent); border:none;
+      border-radius:12px; cursor:pointer; display:flex; align-items:center;
+      justify-content:center; flex-shrink:0; transition:all 0.2s; color:white;
+    }
+    .send-btn:hover{background:#6ba3ff;transform:translateY(-1px)}
+    .send-btn:disabled{background:var(--border);cursor:not-allowed;transform:none}
+    .interrupt-btn {
+      height:42px;
+      padding:0 12px;
+      background:rgba(248,113,113,0.12);
+      border:1px solid rgba(248,113,113,0.35);
+      color:#fca5a5;
+      border-radius:12px;
+      cursor:pointer;
+      font-family:'JetBrains Mono',monospace;
+      font-size:11px;
+      letter-spacing:0.03em;
+      transition:all 0.2s;
+      flex-shrink:0;
+    }
+    .interrupt-btn:hover:not(:disabled){background:rgba(248,113,113,0.2);color:#fecaca}
+    .interrupt-btn:disabled{opacity:0.45;cursor:not-allowed}
+    .voice-btn {
+      width:42px; height:42px; background:rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.3); border-radius:12px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s; color:var(--accent2);
+    }
+    .voice-btn:hover{background:rgba(167,139,250,0.2)}
+    .voice-btn.listening{background:rgba(167,139,250,0.25);border-color:var(--accent2);animation:micpulse 1.5s ease-in-out infinite}
+    @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,0.4)}50%{box-shadow:0 0 0 8px rgba(167,139,250,0)}}
+    /* Modal */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(12px);
+      z-index:200; display:flex; align-items:center; justify-content:center;
+    }
+    .modal {
+      background:var(--surface); border: 1px solid var(--border); border-radius:20px;
+      padding:36px; width:min(450px,92vw); box-shadow: 0 40px 80px rgba(0,0,0,0.8);
+    }
+    .modal-icon{font-size:44px;margin-bottom:14px;display:block}
+    .modal h2{font-size:22px;font-weight:800;margin-bottom:10px;letter-spacing:-0.02em}
+    .modal p{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:20px}
+    .modal p a{color:var(--accent);text-decoration:none}
+    .modal p a:hover{text-decoration:underline}
+    .modal p code{background:rgba(79,142,247,0.1);color:var(--accent);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px}
+    .modal-input {
+      width:100%; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:10px; color:var(--text); font-family:'JetBrains Mono',monospace;
+      font-size:13px; padding:12px 14px; outline:none; margin-bottom:8px; transition:border-color 0.2s;
+    }
+    .modal-input:focus{border-color:var(--accent)}
+    .modal-error{font-size:12px;color:#f87171;margin-bottom:10px;font-family:'JetBrains Mono',monospace;display:none}
+    .modal-error.show{display:block}
+    .modal-btn {
+      width:100%; padding:13px; background:var(--accent); border:none; border-radius:10px;
+      color:#fff; font-family:'Outfit',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.2s;
+    }
+    .modal-btn:hover{background:#6ba3ff}
+    .modal-skip{display:block;text-align:center;margin-top:12px;font-size:12px;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em}
+    .modal-skip:hover{color:var(--text)}
+    /* Settings */
+    .settings-panel {
+      position:fixed; top:58px; right:18px;
+      background: rgba(13,17,23,0.78);
+      border: 1px solid var(--glass-border);
+      border-radius:14px; padding:18px; width:290px;
+      z-index:100;
+      box-shadow: var(--float-shadow);
+      backdrop-filter: blur(20px);
+      display:none;
+    }
+    .settings-panel.show{display:block}
+    .settings-title{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:0.15em;margin-bottom:12px}
+    .settings-input {
+      width:100%; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:8px; color:var(--text); font-family:'JetBrains Mono',monospace;
+      font-size:12px; padding:9px 12px; outline:none; margin-bottom:8px; transition:border-color 0.2s;
+    }
+    .settings-input:focus{border-color:var(--accent)}
+    .settings-save {
+      width:100%; padding:9px; background:var(--accent); border:none; border-radius:8px;
+      color:#fff; font-size:12px; font-weight:600; font-family:'JetBrains Mono',monospace;
+      cursor:pointer; letter-spacing:0.05em; transition:background 0.2s;
+    }
+    .settings-save:hover{background:#6ba3ff}
+    @media (max-width: 980px) {
+      .main { grid-template-columns: 1fr; }
+      .avatar-panel { min-height: 38vh; }
+      .chat-panel { border-left: none; border-top: 1px solid var(--glass-border); }
+      .header { padding: 10px 12px; gap: 10px; }
+      .header-right { gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      #mode-toggle { min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <span class="modal-icon">📝</span>
+    <h2>Set up Lexi</h2>
+    <p>
+      Lexi runs locally with <strong>Ollama</strong> for offline help.<br><br>
+      1️⃣ Start Ollama: <code>ollama serve</code><br>
+      2️⃣ Pull a model: <code>ollama pull qwen2.5:7b</code><br>
+      3️⃣ Set endpoint + model below
+    </p>
+    <input class="modal-input" id="api-key-input" type="text" placeholder="http://127.0.0.1:11434" autocomplete="off"/>
+    <input class="modal-input" id="ollama-model-input" type="text" placeholder="qwen2.5:7b" autocomplete="off"/>
+    <div class="modal-error" id="modal-error">⚠ Could not connect to Ollama</div>
+    <button class="modal-btn" id="api-key-save">Connect Ollama →</button>
+    <span class="modal-skip" id="modal-skip">Skip — built-in answers only</span>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-title">OLLAMA SETTINGS</div>
+  <input class="settings-input" id="settings-key" type="text" placeholder="http://127.0.0.1:11434" />
+  <input class="settings-input" id="settings-model" type="text" placeholder="qwen2.5:7b" />
+  <button class="settings-save" id="settings-save">Save & Test</button>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <div class="brand-name">Lexi</div>
+      <div class="brand-tag">STUDY COMPANION</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <select id="mode-toggle" title="Study mode selector">
+      <option value="study">📚 Study</option>
+      <option value="quiz">🎯 Quiz</option>
+      <option value="chat">💬 Chat</option>
+    </select>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span id="status-text">LOADING...</span>
+    </div>
+    <button class="settings-btn" id="settings-btn" title="Ollama Settings">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+  <div class="avatar-panel">
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="loader-ring"></div>
+      <div class="loader-text" id="loader-text">LOADING LEXI...</div>
+    </div>
+    <div class="anim-hint" id="anim-hint">👆 click lexi to wave!</div>
+    <div class="anim-controls">
+      <select id="anim-select" class="anim-select" disabled>
+        <option>Loading clips...</option>
+      </select>
+      <button id="anim-play-btn" class="anim-btn" type="button" disabled>Play</button>
+      <button id="anim-random-btn" class="anim-btn" type="button" disabled>Random</button>
+    </div>
+    <canvas id="avatar-canvas"></canvas>
+    <div class="speaking-waves" id="speaking-waves">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="avatar-label">LEXI v1.0 — STUDY COMPANION</div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-top">
+      <div>
+        <div class="chat-title">CONVERSATION</div>
+        <div class="topic-badge" id="topic-badge">📚 General</div>
+      </div>
+      <div class="msg-count" id="msg-count">0 msgs</div>
+    </div>
+    <div class="messages" id="messages">
+      <div class="message lexi">
+        <div class="msg-label">LEXI</div>
+        <div class="msg-bubble">Hey! I'm Lexi 👋 I can explain concepts, quiz you, help with homework, or just chat while you study. What are we learning today?</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="quick-prompts">
+        <button class="quick-btn" onclick="quickSend('Explain photosynthesis simply')">🌱 Photosynthesis</button>
+        <button class="quick-btn" onclick="quickSend('Quiz me on World War 2')">🎯 WW2 Quiz</button>
+        <button class="quick-btn" onclick="quickSend('How does Newton third law work?')">⚡ Physics</button>
+        <button class="quick-btn" onclick="quickSend('Help me with quadratic equations')">➗ Maths</button>
+        <button class="quick-btn" onclick="quickSend('Tell me something amazing about space')">🚀 Space</button>
+      </div>
+      <input class="file-upload" type="file" id="file-upload" accept=".pdf,.txt,.docx" />
+      <div class="study-tools">
+        <button class="tool-btn" onclick="generateFlashcards()">🧠 Flashcards</button>
+        <button class="tool-btn" onclick="generateQuiz()">🎯 Auto Quiz</button>
+      </div>
+      <div class="input-row">
+        <button class="voice-btn" id="voice-btn" title="Voice input">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <button class="interrupt-btn" id="interrupt-btn" type="button" disabled>Stop</button>
+        <textarea class="chat-input" id="chat-input" rows="1" placeholder="Ask Lexi anything..." onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────
+let OLLAMA_ENDPOINT = 'http://127.0.0.1:11434';
+let OLLAMA_MODEL = 'qwen2.5:7b';
+let OLLAMA_CONNECTED = false;
+let isLoading = false;
+let isSpeakingNow = false;
+let isListening = false;
+let msgCount = 0;
+let activeRequestController = null;
+let conversationHistory = [];
+let mixer = null;
+let animations = {};
+let currentAction = null;
+let modelLoaded = false;
+let currentMode = 'study';
+let clock = new THREE.Clock();
+
+const animSelect = document.getElementById('anim-select');
+const animPlayBtn = document.getElementById('anim-play-btn');
+const animRandomBtn = document.getElementById('anim-random-btn');
+
+function getAnimationNames() {
+  return Object.keys(animations);
+}
+
+function refreshAnimationControls() {
+  const names = getAnimationNames();
+  animSelect.innerHTML = '';
+
+  if (!names.length) {
+    animSelect.disabled = true;
+    animPlayBtn.disabled = true;
+    animRandomBtn.disabled = true;
+    animSelect.innerHTML = '<option>No clips available</option>';
+    return;
+  }
+
+  for (const name of names) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    animSelect.appendChild(option);
+  }
+
+  const idle = names.find(name => name.toLowerCase() === 'idle');
+  if (idle) animSelect.value = idle;
+
+  animSelect.disabled = false;
+  animPlayBtn.disabled = false;
+  animRandomBtn.disabled = false;
+}
+
+function playSelectedAnimation() {
+  if (!modelLoaded) return;
+  const name = animSelect.value;
+  if (!name) return;
+
+  if (name.toLowerCase() === 'idle') playAnimation(name, true);
+  else playThenIdle(name);
+}
+
+function playRandomAnimation() {
+  if (!modelLoaded) return;
+  const names = getAnimationNames().filter(name => name.toLowerCase() !== 'idle');
+  if (!names.length) return;
+  const name = names[Math.floor(Math.random() * names.length)];
+  animSelect.value = name;
+  playThenIdle(name);
+}
+
+animPlayBtn.onclick = playSelectedAnimation;
+animRandomBtn.onclick = playRandomAnimation;
+
+// Handy console helpers: listLexiAnimations(), playLexiAnimation('Wave')
+window.listLexiAnimations = () => getAnimationNames();
+window.playLexiAnimation = clipName => {
+  const names = getAnimationNames();
+  const target = names.find(n => n.toLowerCase() === String(clipName || '').toLowerCase());
+  if (!target) return false;
+  if (target.toLowerCase() === 'idle') playAnimation(target, true);
+  else playThenIdle(target);
+  animSelect.value = target;
+  return true;
+};
+
+const TOPIC_BADGES = {
+  math: '🔢 Mathematics',
+  science: '🔬 Science',
+  history: '📜 History',
+  coding: '💻 Coding',
+  geography: '🌍 Geography',
+  literature: '📖 Literature',
+  space: '🚀 Space'
+};
+
+const TOPIC_KEYWORDS = {
+  '🔢 Mathematics': ['math','algebra','calculus','equation','geometry','trigonometry','quadratic','derivative'],
+  '🔬 Science': ['science','physics','chemistry','biology','atom','cell','force','energy','photosynthesis'],
+  '📜 History': ['history','war','century','ancient','empire','revolution','civilization'],
+  '📖 Literature': ['poem','novel','shakespeare','literature','essay','story','author'],
+  '💻 Coding': ['code','programming','algorithm','python','javascript','function','loop'],
+  '🌍 Geography': ['country','continent','capital','ocean','mountain','river','geography'],
+  '🚀 Space': ['space','planet','star','galaxy','moon','solar','universe','asteroid']
+};
+
+function getModeLabel(mode = currentMode) {
+  const labels = {
+    study: '📚 Study',
+    quiz: '🎯 Quiz',
+    chat: '💬 Chat'
+  };
+  return labels[mode] || '📚 Study';
+}
+
+function normalizeEndpoint(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  let normalized = raw.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(normalized)) {
+    normalized = `http://${normalized}`;
+  }
+
+  // Prefer IPv4 loopback to avoid localhost/IPv6 resolution issues in some setups.
+  normalized = normalized.replace('://localhost', '://127.0.0.1');
+  return normalized;
+}
+
+function setReadyStatus() {
+  setStatus(OLLAMA_CONNECTED ? 'LOCAL READY' : 'BUILT-IN MODE');
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+document.getElementById('api-key-save').onclick = async () => {
+  const endpoint = normalizeEndpoint(document.getElementById('api-key-input').value) || OLLAMA_ENDPOINT;
+  const model = document.getElementById('ollama-model-input').value.trim() || OLLAMA_MODEL;
+  const err = document.getElementById('modal-error');
+  const previousEndpoint = OLLAMA_ENDPOINT;
+  const previousModel = OLLAMA_MODEL;
+  const previousConnected = OLLAMA_CONNECTED;
+
+  if (!endpoint || !model) {
+    err.textContent = '⚠ Enter both endpoint and model';
+    err.classList.add('show'); return;
+  }
+  OLLAMA_ENDPOINT = endpoint;
+  OLLAMA_MODEL = model;
+  setStatus('CONNECTING OLLAMA...');
+
+  const check = await testOllama();
+  if (!check.ok) {
+    OLLAMA_ENDPOINT = previousEndpoint;
+    OLLAMA_MODEL = previousModel;
+    OLLAMA_CONNECTED = previousConnected;
+    err.textContent = `⚠ ${check.error}`;
+    err.classList.add('show');
+    setReadyStatus();
+    return;
+  }
+
+  err.classList.remove('show');
+  document.getElementById('modal').style.display = 'none';
+  document.getElementById('settings-key').value = OLLAMA_ENDPOINT;
+  document.getElementById('settings-model').value = OLLAMA_MODEL;
+  setReadyStatus();
+  addMsg('lexi', `Connected to Ollama at ${OLLAMA_ENDPOINT} using ${check.model}.`);
+  incrementMsgCount();
+};
+
+document.getElementById('modal-skip').onclick = () => {
+  document.getElementById('modal').style.display = 'none';
+  OLLAMA_CONNECTED = false;
+  setReadyStatus();
+};
+
+document.getElementById('api-key-input').onkeydown = e => {
+  if (e.key === 'Enter') document.getElementById('api-key-save').click();
+};
+
+document.getElementById('api-key-input').value = OLLAMA_ENDPOINT;
+document.getElementById('ollama-model-input').value = OLLAMA_MODEL;
+
+document.getElementById('mode-toggle').onchange = e => {
+  currentMode = e.target.value;
+  addMsg('lexi', `Mode switched to ${getModeLabel(currentMode)}.`);
+  incrementMsgCount();
+};
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+document.getElementById('settings-btn').onclick = e => {
+  e.stopPropagation();
+  document.getElementById('settings-panel').classList.toggle('show');
+};
+document.addEventListener('click', () => document.getElementById('settings-panel').classList.remove('show'));
+
+document.getElementById('settings-save').onclick = async () => {
+  const endpoint = normalizeEndpoint(document.getElementById('settings-key').value) || OLLAMA_ENDPOINT;
+  const model = document.getElementById('settings-model').value.trim() || OLLAMA_MODEL;
+  const previousEndpoint = OLLAMA_ENDPOINT;
+  const previousModel = OLLAMA_MODEL;
+  const previousConnected = OLLAMA_CONNECTED;
+  if (!endpoint || !model) {
+    document.getElementById('settings-save').textContent = '⚠ Invalid format';
+    setTimeout(() => document.getElementById('settings-save').textContent = 'Save & Test', 2000);
+    return;
+  }
+  OLLAMA_ENDPOINT = endpoint;
+  OLLAMA_MODEL = model;
+  document.getElementById('settings-save').textContent = 'Testing...';
+  const check = await testOllama();
+  document.getElementById('settings-save').textContent = check.ok
+    ? `✓ ${check.model}`
+    : '✗ Not connected';
+  if (check.ok) {
+    document.getElementById('api-key-input').value = OLLAMA_ENDPOINT;
+    document.getElementById('ollama-model-input').value = OLLAMA_MODEL;
+    setReadyStatus();
+  } else {
+    OLLAMA_ENDPOINT = previousEndpoint;
+    OLLAMA_MODEL = previousModel;
+    OLLAMA_CONNECTED = previousConnected;
+    setReadyStatus();
+    addMsg('lexi', `Ollama check failed: ${check.error}`);
+    incrementMsgCount();
+  }
+  setTimeout(() => {
+    document.getElementById('settings-save').textContent = 'Save & Test';
+    if (check.ok) document.getElementById('settings-panel').classList.remove('show');
+  }, 2500);
+};
+
+document.getElementById('settings-key').value = OLLAMA_ENDPOINT;
+document.getElementById('settings-model').value = OLLAMA_MODEL;
+
+async function testOllama() {
+  const endpointCandidates = [OLLAMA_ENDPOINT];
+  if (OLLAMA_ENDPOINT.includes('localhost')) {
+    endpointCandidates.push(OLLAMA_ENDPOINT.replace('localhost', '127.0.0.1'));
+  }
+
+  try {
+    for (const endpoint of endpointCandidates) {
+      const tagsRes = await fetch(`${endpoint}/api/tags`);
+      if (!tagsRes.ok) continue;
+
+      const tagsData = await tagsRes.json().catch(() => ({}));
+      const availableModels = (tagsData.models || []).map(m => String(m.name || '').toLowerCase());
+      const selected = OLLAMA_MODEL.toLowerCase();
+      const hasModel = availableModels.some(name => name === selected || name.startsWith(`${selected}:`));
+      if (!hasModel) {
+        OLLAMA_CONNECTED = false;
+        return { ok: false, error: `Model "${OLLAMA_MODEL}" not found. Run: ollama pull ${OLLAMA_MODEL}` };
+      }
+
+      const res = await fetch(`${endpoint}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          prompt: 'Say OK',
+          stream: false,
+          options: { num_predict: 8 }
+        })
+      });
+
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e?.error?.message || `HTTP ${res.status}`);
+      }
+
+      OLLAMA_ENDPOINT = endpoint;
+      OLLAMA_CONNECTED = true;
+      return { ok: true, model: OLLAMA_MODEL };
+    }
+
+    throw new Error('Failed to fetch');
+  } catch (err) {
+    OLLAMA_CONNECTED = false;
+    return { ok: false, error: explainApiError(err.message) };
+  }
+}
+
+// ─── Three.js ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('avatar-canvas');
+const scene = new THREE.Scene();
+const AVATAR_SCALE = 0.68;
+const FALLBACK_AVATAR_SCALE = 0.72;
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 1.2, 5.4);
+camera.lookAt(0, 1, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+function resizeAvatar() {
+  const p = canvas.parentElement;
+  renderer.setSize(p.clientWidth, p.clientHeight);
+  camera.aspect = p.clientWidth / p.clientHeight;
+  camera.updateProjectionMatrix();
+}
+resizeAvatar();
+window.addEventListener('resize', resizeAvatar);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const keyLight = new THREE.DirectionalLight(0x8ab4f8, 1.8);
+keyLight.position.set(3, 5, 4); keyLight.castShadow = true; scene.add(keyLight);
+const fillLight = new THREE.PointLight(0xa78bfa, 1.2, 12);
+fillLight.position.set(-4, 2, 2); scene.add(fillLight);
+const rimLight = new THREE.PointLight(0x34d399, 0.7, 10);
+rimLight.position.set(0, 5, -4); scene.add(rimLight);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(8, 8),
+  new THREE.MeshStandardMaterial({ color: 0x080e1a, transparent: true, opacity: 0.6 })
+);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// ── Load model ──
+const loader = new THREE.GLTFLoader();
+loader.load(
+  'https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb',
+  gltf => {
+    const model = gltf.scene;
+    model.scale.set(AVATAR_SCALE, AVATAR_SCALE, AVATAR_SCALE);
+    model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    scene.add(model);
+
+    mixer = new THREE.AnimationMixer(model);
+    gltf.animations.forEach(clip => { animations[clip.name] = mixer.clipAction(clip); });
+    refreshAnimationControls();
+
+    console.log('[Lexi] Animations:', Object.keys(animations));
+    playAnimation('Idle', true);
+
+    modelLoaded = true;
+    document.getElementById('loading-overlay').classList.add('hidden');
+    setReadyStatus();
+
+    setTimeout(() => {
+      const hint = document.getElementById('anim-hint');
+      hint.classList.add('show');
+      setTimeout(() => hint.classList.remove('show'), 3500);
+    }, 1500);
+  },
+  xhr => {
+    if (xhr.total) {
+      document.getElementById('loader-text').textContent =
+        `LOADING LEXI... ${Math.round(xhr.loaded/xhr.total*100)}%`;
+    }
+  },
+  err => {
+    console.error('[Lexi] Load error:', err);
+    document.getElementById('loading-overlay').classList.add('hidden');
+    buildFallback();
+    modelLoaded = true;
+    setReadyStatus();
+  }
+);
+
+function buildFallback() {
+  const g = new THREE.Group();
+
+  // Head
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x1a2f50, metalness: 0.8, roughness: 0.15 });
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.65), headMat);
+  head.position.y = 1.65; head.castShadow = true; g.add(head);
+
+  // Face visor
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x0a1525, metalness: 0.1, roughness: 0.05, transparent: true, opacity: 0.9 });
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.35,0.05), visorMat);
+  visor.position.set(0,1.68,0.35); g.add(visor);
+
+  // Eyes (glowing)
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x4f8ef7, emissive: 0x4f8ef7, emissiveIntensity: 3 });
+  const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.06,0.02), eyeMat);
+  eye1.position.set(-0.14,1.72,0.38); g.add(eye1);
+  const eye2 = eye1.clone(); eye2.position.x = 0.14; g.add(eye2);
+
+  // Mouth
+  const mouthMat = new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x34d399, emissiveIntensity: 2 });
+  for (let i = 0; i < 4; i++) {
+    const dot = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.04,0.02), mouthMat);
+    dot.position.set(-0.09 + i*0.06, 1.57, 0.38); g.add(dot);
+  }
+
+  // Antenna
+  const antMat = new THREE.MeshStandardMaterial({ color: 0xa78bfa, metalness: 0.9, roughness: 0.1 });
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.35,8), antMat);
+  ant.position.set(0,2.18,0); g.add(ant);
+  const antBall = new THREE.Mesh(new THREE.SphereGeometry(0.07,16,16),
+    new THREE.MeshStandardMaterial({ color: 0xa78bfa, emissive: 0xa78bfa, emissiveIntensity: 3 }));
+  antBall.position.set(0,2.38,0); g.add(antBall);
+
+  // Body
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x152035, metalness: 0.7, roughness: 0.2 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.95,0.55), bodyMat);
+  body.position.y = 0.9; body.castShadow = true; g.add(body);
+
+  // Chest light
+  const chestLight = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.18,0.05),
+    new THREE.MeshStandardMaterial({ color: 0x4f8ef7, emissive: 0x4f8ef7, emissiveIntensity: 1 }));
+  chestLight.position.set(0,0.95,0.3); g.add(chestLight);
+
+  // Arms
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1a2f50, metalness: 0.7, roughness: 0.2 });
+  [-1,1].forEach(side => {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.09,0.65,12), armMat);
+    arm.position.set(side*0.55, 0.85, 0); arm.rotation.z = side * 0.15;
+    arm.castShadow = true; g.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.11,12,12), armMat);
+    hand.position.set(side*0.62, 0.52, 0); g.add(hand);
+  });
+
+  // Legs
+  [-1,1].forEach(side => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.1,0.6,12), armMat);
+    leg.position.set(side*0.22, 0.3, 0); leg.castShadow = true; g.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.12,0.35), armMat);
+    foot.position.set(side*0.22, -0.02, 0.05); g.add(foot);
+  });
+
+  g.scale.setScalar(FALLBACK_AVATAR_SCALE);
+  scene.add(g);
+
+  // Animate fallback with bob + sway
+  let t = 0;
+  const baseY = -0.12;
+  mixer = {
+    update: dt => {
+      t += dt;
+      g.position.y = baseY + Math.sin(t * 0.9) * 0.06;
+      g.rotation.y = Math.sin(t * 0.4) * 0.08;
+      // Pulse eyes
+      eyeMat.emissiveIntensity = 2 + Math.sin(t * 2) * 1;
+      antBall.material.emissiveIntensity = 2 + Math.sin(t * 3) * 1.5;
+      chestLight.material.emissiveIntensity = 0.8 + Math.sin(t * 4) * 0.6;
+    }
+  };
+  animations = {};
+  refreshAnimationControls();
+  modelLoaded = true;
+  document.getElementById('loading-overlay').classList.add('hidden');
+  setReadyStatus();
+}
+
+// ── Animation controller ──
+function playAnimation(name, loop = false, onDone = null) {
+  const fallbackMap = { 'Dance': 'Running', 'Nod': 'Yes', 'Wave': 'Wave', 'Idle': 'Idle', 'Yes': 'Yes' };
+  const target = animations[name] ? name : (fallbackMap[name] && animations[fallbackMap[name]] ? fallbackMap[name] : null);
+  if (!target) return;
+
+  const next = animations[target];
+  if (currentAction && currentAction !== next) currentAction.fadeOut(0.25);
+
+  next.reset();
+  next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+  next.clampWhenFinished = !loop;
+  next.fadeIn(0.25).play();
+  currentAction = next;
+
+  if (!loop && onDone) {
+    const handler = () => { onDone(); mixer.removeEventListener('finished', handler); };
+    mixer.addEventListener('finished', handler);
+  }
+}
+
+function playThenIdle(name) {
+  playAnimation(name, false, () => setTimeout(() => playAnimation('Idle', true), 150));
+}
+
+canvas.onclick = () => { if (modelLoaded) playThenIdle('Wave'); };
+
+// ── Render loop ──
+(function animate() {
+  requestAnimationFrame(animate);
+  if (mixer) mixer.update(clock.getDelta());
+  renderer.render(scene, camera);
+})();
+
+// ─── Ollama ──────────────────────────────────────────────────────────────────
+function explainApiError(rawMessage = '') {
+  const message = String(rawMessage || '').trim();
+  const low = message.toLowerCase();
+
+  if (low.includes('failed to fetch') || low.includes('networkerror')) {
+    if (typeof window !== 'undefined' && window.location?.protocol === 'file:') {
+      return 'Browser blocked API from file:// origin. Start a local server and open Lexi via http://127.0.0.1.';
+    }
+    return `Cannot reach Ollama at ${OLLAMA_ENDPOINT}. Start it with: ollama serve`;
+  }
+  if ((low.includes('not found') && low.includes('model')) || low.includes('model "') && low.includes('not found')) {
+    return `Model "${OLLAMA_MODEL}" is missing. Run: ollama pull ${OLLAMA_MODEL}`;
+  }
+  if (low.includes('cors') || low.includes('origin') || low.includes('access-control-allow-origin')) {
+    return 'Browser origin is blocked by Ollama. Serve Lexi from localhost and allow that origin.';
+  }
+  if (low.includes('http 404')) {
+    return `Ollama endpoint looks wrong: ${OLLAMA_ENDPOINT}`;
+  }
+  if (low.includes('http 500')) {
+    return 'Ollama server error. Restart Ollama and try again.';
+  }
+
+  return `Ollama error: ${message}`;
+}
+
+async function ensureOllamaConnection() {
+  if (OLLAMA_CONNECTED) return true;
+  const check = await testOllama();
+  if (!check.ok) throw new Error(check.error);
+  return true;
+}
+
+function getSystemPrompt() {
+  return `
+You are Lexi.
+
+Mode: ${currentMode}
+
+Study -> explain concepts with simple examples.
+Quiz -> ask short questions, wait for the student, then grade gently.
+Chat -> casual and friendly conversation.
+
+General rules:
+- Keep responses concise unless the user asks for detail.
+- Use simple language and supportive tone.
+- Prefer practical examples over jargon.
+- End with a short next-step or encouragement when useful.
+`;
+}
+
+async function askLLM(msg, options = {}) {
+  const {
+    trackConversation = true,
+    temperature = 0.8,
+    maxOutputTokens = 350,
+    systemPrompt = getSystemPrompt(),
+    signal = null
+  } = options;
+
+  if (trackConversation) {
+    conversationHistory.push({ role: 'user', parts: [{ text: msg }] });
+  }
+
+  const contents = trackConversation
+    ? conversationHistory
+    : [{ role: 'user', parts: [{ text: msg }] }];
+
+  try {
+    await ensureOllamaConnection();
+
+    const historyText = contents
+      .map(entry => {
+        const who = entry.role === 'model' ? 'Lexi' : 'User';
+        const text = entry.parts?.[0]?.text || '';
+        return `${who}: ${text}`;
+      })
+      .join('\n');
+
+    const prompt = trackConversation
+      ? `${systemPrompt}\n\nConversation:\n${historyText}\n\nLexi:`
+      : `${systemPrompt}\n\n${msg}`;
+
+    const res = await fetch(`${OLLAMA_ENDPOINT}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: {
+          temperature,
+          num_predict: maxOutputTokens
+        }
+      })
+    });
+
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const reply = String(data.response || '').trim();
+    if (!reply) throw new Error('Empty response from Ollama.');
+
+    if (trackConversation) {
+      conversationHistory.push({ role: 'model', parts: [{ text: reply }] });
+    }
+    OLLAMA_CONNECTED = true;
+    return reply;
+
+  } catch (err) {
+    if (trackConversation) conversationHistory.pop();
+    if (err.name === 'AbortError') throw err;
+    OLLAMA_CONNECTED = false;
+    console.error('[Ollama]', err.message);
+    return `❌ ${explainApiError(err.message)}`;
+  }
+}
+
+function getDemoReply(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(hi|hello|hey)\b/.test(m)) {
+    return "Hey! 👋 I'm in built-in mode. Connect Ollama from ⚙️ to unlock full offline answers.";
+  }
+  if (m.includes('quiz')) {
+    return 'I can do full quiz generation once Ollama is connected. Start with: ollama serve and ollama pull qwen2.5:7b';
+  }
+  return 'I am currently using built-in replies only. Open ⚙️ and connect Ollama to run fully offline.';
+}
+
+function getBuiltInAnswer(text) {
+  const t = text.toLowerCase();
+
+  const builtIns = [
+    {
+      topic: '🔬 Science',
+      test: /\bphotosynthesis\b/,
+      reply: 'Photosynthesis is how plants make food 🌿. They use sunlight + water + carbon dioxide to make glucose (food) and oxygen. Think of leaves as tiny solar kitchens. Want a 3-step memory trick for this?'
+    },
+    {
+      topic: '🔬 Science',
+      test: /newton.{0,20}(third|3rd)|third law/,
+      reply: 'Newton\'s 3rd law says: every action has an equal and opposite reaction. If you push a wall, the wall pushes back with the same force. That\'s why rockets move forward when gases shoot backward. Want one sports example too?'
+    },
+    {
+      topic: '🔢 Mathematics',
+      test: /quadratic|ax\^?2|x\^2\s*[+-]/,
+      reply: 'For quadratic equations, the big formula is: x = (-b +/- sqrt(b^2 - 4ac)) / (2a). Start by matching your equation to ax^2 + bx + c = 0, then plug values carefully. Want me to solve one with you step-by-step?'
+    },
+    {
+      topic: '📜 History',
+      test: /world\s*war\s*2|\bww2\b|\bwwii\b/,
+      reply: 'World War II (1939-1945) was mainly between the Allies and Axis powers. Key turning points included Stalingrad, D-Day, and Midway. It ended after Germany surrendered in Europe and Japan surrendered in Asia. Want a super-short timeline format?'
+    },
+    {
+      topic: '💻 Coding',
+      test: /\bpython\b.*\bloop\b|\bfor loop\b|\bwhile loop\b/,
+      reply: 'A loop repeats code. Use a for-loop when you know what to iterate over (like a list), and a while-loop when repeating until a condition changes. Example: for item in items: print(item). Want a mini practice problem?'
+    },
+    {
+      topic: '🚀 Space',
+      test: /space|planet|galaxy|solar system|black hole/,
+      reply: 'Space fact 🚀: A day on Venus is longer than a Venus year. Venus rotates very slowly, so one full spin takes longer than one trip around the Sun. Want 3 more mind-blowing space facts?'
+    },
+    {
+      topic: '📚 General',
+      test: /study tip|how to study|focus|concentrat|pomodoro|revision/,
+      reply: 'Try this fast study system: 25 minutes focus + 5 minutes break (Pomodoro), active recall (close notes and answer from memory), then spaced repetition later. Short daily sessions beat last-minute cramming. Want me to build you a 1-hour plan for today?'
+    },
+    {
+      topic: '📚 General',
+      test: /who are you|what are you|about lexi/,
+      reply: 'I\'m Lexi, your study companion. I can explain hard topics simply, quiz you, create flashcards, and help you revise faster. Tell me your subject and level, and I\'ll adapt.'
+    }
+  ];
+
+  if (currentMode === 'quiz' && /quiz me|test me|start quiz|ask me questions/.test(t)) {
+    return {
+      topic: '📚 General',
+      reply: 'Quiz mode on 🎯\n1) What is the powerhouse of the cell?\nA) Nucleus B) Mitochondria C) Ribosome D) Golgi\n\n2) Solve: 2x + 6 = 14\n\n3) Which year did World War II end?\nReply with your answers like: 1B, 2x=4, 3-1945'
+    };
+  }
+
+  for (const item of builtIns) {
+    if (item.test.test(t)) return { topic: item.topic, reply: item.reply };
+  }
+
+  if (/\b(hi|hello|hey|yo)\b/.test(t)) {
+    return {
+      topic: '📚 General',
+      reply: `Hey! I\'m Lexi 👋 (${getModeLabel(currentMode)} mode). Ask me a topic, upload notes, or say "quiz me" to start.`
+    };
+  }
+
+  return null;
+}
+
+// ─── TTS ─────────────────────────────────────────────────────────────────────
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const clean = text.replace(/[*_`#>]/g,'').replace(/\n+/g,' ').trim();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate = 0.75; utter.pitch = 1.25; utter.volume = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const indiaVoiceHint = /(female|woman|girl|neerja|aditi|priya|swara|sangeeta|kalpana|india)/i;
+  const v = voices.find(v => v.lang === 'en-IN' && indiaVoiceHint.test(v.name))
+    || voices.find(v => v.lang === 'en-IN')
+    || voices.find(v => indiaVoiceHint.test(v.name) && v.lang.startsWith('en'))
+         || voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+         || voices.find(v => v.lang.startsWith('en-US')) || voices[0];
+  if (v) utter.voice = v;
+  utter.onstart = () => {
+    isSpeakingNow = true;
+    document.getElementById('speaking-waves').classList.add('active');
+    setStatus('SPEAKING');
+  };
+  utter.onend = utter.onerror = () => {
+    isSpeakingNow = false;
+    document.getElementById('speaking-waves').classList.remove('active');
+    setReadyStatus();
+  };
+  window.speechSynthesis.speak(utter);
+}
+window.speechSynthesis?.addEventListener('voiceschanged', () => {});
+
+// ─── Voice Input ──────────────────────────────────────────────────────────────
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let pendingVoiceTranscript = '';
+let voiceHadResult = false;
+let lastVoiceError = '';
+const voiceBtn = document.getElementById('voice-btn');
+const interruptBtn = document.getElementById('interrupt-btn');
+
+function setInterruptEnabled(enabled) {
+  interruptBtn.disabled = !enabled;
+}
+
+function beginInterruptibleRequest() {
+  if (activeRequestController) {
+    activeRequestController.abort();
+  }
+  activeRequestController = new AbortController();
+  setInterruptEnabled(true);
+  return activeRequestController;
+}
+
+function endInterruptibleRequest(controller = null) {
+  if (controller && activeRequestController !== controller) return;
+  activeRequestController = null;
+  setInterruptEnabled(false);
+}
+
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.lang = (navigator.language && navigator.language.startsWith('en')) ? navigator.language : 'en-US';
+
+  recognition.onstart = () => {
+    pendingVoiceTranscript = '';
+    voiceHadResult = false;
+    lastVoiceError = '';
+    isListening = true;
+    voiceBtn.classList.add('listening');
+    setStatus('LISTENING...');
+  };
+
+  recognition.onresult = e => {
+    let finalText = '';
+    let interimText = '';
+
+    for (let i = e.resultIndex; i < e.results.length; i += 1) {
+      const text = e.results[i][0]?.transcript?.trim() || '';
+      if (!text) continue;
+      if (e.results[i].isFinal) finalText += `${finalText ? ' ' : ''}${text}`;
+      else interimText += `${interimText ? ' ' : ''}${text}`;
+    }
+
+    const combined = (finalText || interimText).trim();
+    if (!combined) return;
+
+    pendingVoiceTranscript = combined;
+    voiceHadResult = true;
+    document.getElementById('chat-input').value = combined;
+  };
+
+  recognition.onerror = e => {
+    lastVoiceError = e?.error || 'unknown';
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    voiceBtn.classList.remove('listening');
+
+    if (pendingVoiceTranscript) {
+      const input = document.getElementById('chat-input');
+      if (!input.value.trim()) input.value = pendingVoiceTranscript;
+      if (!isLoading) sendMessage();
+    } else if (lastVoiceError === 'no-speech') {
+      addMsg('lexi', "I couldn't hear anything clearly. Try speaking a bit closer to the mic.");
+      incrementMsgCount();
+    } else if (!voiceHadResult && !lastVoiceError) {
+      addMsg('lexi', 'I did not catch that. Please try again.');
+      incrementMsgCount();
+    }
+
+    pendingVoiceTranscript = '';
+    voiceHadResult = false;
+    lastVoiceError = '';
+
+    if (!isSpeakingNow && !isLoading) setReadyStatus();
+  };
+} else {
+  voiceBtn.style.opacity = '0.3'; voiceBtn.title = 'Not supported in this browser';
+}
+
+voiceBtn.onclick = () => {
+  if (!recognition) return;
+  if (isListening) { recognition.stop(); return; }
+  window.speechSynthesis?.cancel();
+  try {
+    recognition.start();
+  } catch (err) {
+    addMsg('lexi', `Microphone could not start: ${err.message}`);
+    incrementMsgCount();
+    setReadyStatus();
+  }
+};
+
+interruptBtn.onclick = () => {
+  if (!activeRequestController) return;
+  activeRequestController.abort();
+  window.speechSynthesis?.cancel();
+  document.getElementById('thinking-msg')?.remove();
+  isLoading = false;
+  document.getElementById('send-btn').disabled = false;
+  endInterruptibleRequest();
+  setReadyStatus();
+  addMsg('lexi', 'No problem, I paused there. Continue whenever you are ready.');
+  incrementMsgCount();
+};
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+function setStatus(t) { document.getElementById('status-text').textContent = t; }
+
+function incrementMsgCount(by = 1) {
+  msgCount += by;
+  document.getElementById('msg-count').textContent = `${msgCount} msgs`;
+}
+
+function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+
+function quickSend(text) { document.getElementById('chat-input').value = text; sendMessage(); }
+
+function addMsg(role, content, thinking = false) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+  if (thinking) {
+    div.id = 'thinking-msg';
+    div.innerHTML = `<div class="msg-label">LEXI</div><div class="thinking-bubble"><span></span><span></span><span></span></div>`;
+  } else {
+    const label = document.createElement('div');
+    label.className = 'msg-label';
+    label.textContent = role === 'user' ? 'YOU' : 'LEXI';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.textContent = content;
+
+    div.appendChild(label);
+    div.appendChild(bubble);
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function getConversationTranscript(limit = 12000) {
+  const bubbles = Array.from(document.querySelectorAll('#messages .msg-bubble'));
+  const allText = bubbles.map(b => b.textContent.trim()).join('\n');
+  return allText.slice(Math.max(0, allText.length - limit));
+}
+
+function detectTopicByKeyword(t) {
+  const low = t.toLowerCase();
+  for (const [topic, keys] of Object.entries(TOPIC_KEYWORDS))
+    if (keys.some(k => low.includes(k))) return topic;
+  return '📚 General';
+}
+
+function normalizeTopicLabel(raw) {
+  const text = String(raw || '').trim().toLowerCase();
+  for (const [key, badge] of Object.entries(TOPIC_BADGES)) {
+    if (text.includes(key) || text.includes(badge.toLowerCase())) return badge;
+  }
+  return '📚 General';
+}
+
+async function detectTopicAI(text, signal = null) {
+  if (!OLLAMA_CONNECTED) return detectTopicByKeyword(text);
+
+  const prompt = `
+Classify this question into ONE category:
+Math, Science, History, Coding, Geography, Literature, Space
+
+Question: ${text}
+
+Reply with exactly one category word.
+`;
+
+  try {
+    const res = await askLLM(prompt, {
+      trackConversation: false,
+      temperature: 0,
+      maxOutputTokens: 10,
+      systemPrompt: 'You are a strict classifier. Output only one category from the allowed list.',
+      signal
+    });
+    return normalizeTopicLabel(res);
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
+    return detectTopicByKeyword(text);
+  }
+}
+
+async function runToolPrompt(statusText, loadingMessage, prompt, maxOutputTokens = 700) {
+  if (isLoading) return;
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  const requestController = beginInterruptibleRequest();
+  window.speechSynthesis?.cancel();
+
+  addMsg('lexi', loadingMessage);
+  incrementMsgCount();
+  setStatus(statusText);
+
+  try {
+    const result = await askLLM(prompt, {
+      trackConversation: false,
+      temperature: 0.6,
+      maxOutputTokens,
+      signal: requestController.signal
+    });
+    addMsg('lexi', result);
+    incrementMsgCount();
+    if (window.speechSynthesis) speak(result);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    addMsg('lexi', `I ran into an issue while generating that: ${err.message}`);
+    incrementMsgCount();
+  } finally {
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+    endInterruptibleRequest(requestController);
+    if (!isSpeakingNow) setReadyStatus();
+  }
+}
+
+async function generateFlashcards() {
+  const msgs = getConversationTranscript();
+  if (!msgs.trim()) {
+    addMsg('lexi', 'Send at least one message first, then I can create flashcards.');
+    incrementMsgCount();
+    return;
+  }
+
+  const prompt = `
+Create 5 flashcards from this study session.
+
+Format:
+Q:
+A:
+
+Session:
+${msgs}
+`;
+
+  await runToolPrompt('BUILDING CARDS...', 'Creating flashcards from our session...', prompt);
+}
+
+async function generateQuiz() {
+  const msgs = getConversationTranscript();
+  if (!msgs.trim()) {
+    addMsg('lexi', 'Start a short conversation first and I will build a quiz from it.');
+    incrementMsgCount();
+    return;
+  }
+
+  const prompt = `
+Create a 5 question multiple choice quiz based on our conversation.
+Include the correct answer after each question.
+
+Conversation:
+${msgs}
+`;
+
+  await runToolPrompt('GENERATING QUIZ...', 'Generating a 5-question quiz...', prompt);
+}
+
+if (window.pdfjsLib) {
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.js';
+}
+
+async function extractPdfText(arrayBuffer) {
+  if (!window.pdfjsLib) throw new Error('PDF parser not available.');
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map(item => item.str).join(' '));
+  }
+
+  return pages.join('\n');
+}
+
+async function extractDocxText(arrayBuffer) {
+  if (!window.mammoth) throw new Error('DOCX parser not available.');
+  const result = await window.mammoth.extractRawText({ arrayBuffer });
+  return result.value || '';
+}
+
+async function extractTextFromUpload(file) {
+  const ext = (file.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'txt') return file.text();
+  if (ext === 'pdf') return extractPdfText(await file.arrayBuffer());
+  if (ext === 'docx') return extractDocxText(await file.arrayBuffer());
+  return file.text();
+}
+
+document.getElementById('file-upload').addEventListener('change', async e => {
+  const file = e.target.files?.[0];
+  if (!file || isLoading) return;
+
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  const requestController = beginInterruptibleRequest();
+  window.speechSynthesis?.cancel();
+
+  try {
+    const text = (await extractTextFromUpload(file)).trim();
+    if (!text) throw new Error('No readable text found in file.');
+
+    addMsg('user', `📄 Uploaded file: ${file.name}`);
+    incrementMsgCount();
+    addMsg('lexi', 'Analyzing your notes...');
+    incrementMsgCount();
+
+    setStatus('ANALYZING NOTES...');
+
+    const clipped = text.slice(0, 8000);
+    const topic = await detectTopicAI(clipped, requestController.signal);
+    document.getElementById('topic-badge').textContent = topic;
+
+    const prompt = `
+A student uploaded notes titled: ${file.name}
+
+Mode: ${currentMode}
+
+Generate:
+1) A simple summary
+2) 5 flashcards (Q/A format)
+3) A 5-question multiple choice quiz with answer key
+4) Key formulas or key facts
+
+Keep the response clear, concise, and student-friendly.
+
+Notes:
+${clipped}
+`;
+
+    const reply = await askLLM(prompt, {
+      trackConversation: false,
+      temperature: 0.65,
+      maxOutputTokens: 950,
+      signal: requestController.signal
+    });
+
+    addMsg('lexi', reply);
+    incrementMsgCount();
+    if (window.speechSynthesis) speak(reply);
+
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    console.error('[Upload]', err);
+    addMsg('lexi', `I couldn't read this file cleanly. Try exporting it as .txt first. (${err.message})`);
+    incrementMsgCount();
+  } finally {
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+    endInterruptibleRequest(requestController);
+    if (!isSpeakingNow) setReadyStatus();
+    e.target.value = '';
+  }
+});
+
+function isCorrect(t) {
+  return ['correct','perfect','exactly','right','well done','great job','excellent','yes!','spot on','that\'s it'].some(p => t.toLowerCase().includes(p));
+}
+
+async function sendMessage() {
+  if (isLoading) return;
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  const requestController = beginInterruptibleRequest();
+  window.speechSynthesis?.cancel();
+
+  addMsg('user', text);
+  incrementMsgCount();
+  document.getElementById('topic-badge').textContent = '🧠 Detecting...';
+
+  // Greeting → wave
+  if (modelLoaded && /\b(hi|hello|hey|sup)\b/i.test(text)) playThenIdle('Wave');
+
+  addMsg('lexi', '', true);
+  setStatus('THINKING...');
+
+  try {
+    const builtIn = getBuiltInAnswer(text);
+    let topic = '📚 General';
+    let reply = '';
+
+    if (builtIn) {
+      topic = builtIn.topic || detectTopicByKeyword(text);
+      reply = builtIn.reply;
+      setStatus('QUICK REPLY');
+    } else {
+      [topic, reply] = await Promise.all([
+        detectTopicAI(text, requestController.signal),
+        askLLM(text, { signal: requestController.signal })
+      ]);
+    }
+
+    document.getElementById('topic-badge').textContent = topic;
+    document.getElementById('thinking-msg')?.remove();
+    addMsg('lexi', reply);
+    incrementMsgCount();
+
+    // Correct answer → dance, else nod
+    if (modelLoaded) {
+      if (isCorrect(reply)) playThenIdle('Dance');
+      else playThenIdle('Yes');
+    }
+
+    if (window.speechSynthesis) speak(reply);
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      document.getElementById('thinking-msg')?.remove();
+      return;
+    }
+    document.getElementById('thinking-msg')?.remove();
+    addMsg('lexi', `Something went wrong while sending that message: ${err.message}`);
+    incrementMsgCount();
+  } finally {
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+    endInterruptibleRequest(requestController);
+    if (!isSpeakingNow) setReadyStatus();
+    input.focus();
+  }
+}
+</script>
+</body>
+</html>
