@@ -512,7 +512,7 @@ Reply with exactly one category word.
       if (/\b(hi|hello|hey|yo)\b/.test(low)) {
         return {
           topic: '📚 General',
-          reply: `Hey! I'm Lexi (${getModeLabel(currentMode)} mode). Ask me a topic, upload notes, or say \"quiz me\" to start.`
+          reply: `Hey! I'm Lexi (${getModeLabel(currentMode)} mode). Ask me a topic, upload notes, or say "quiz me" to start.`
         };
       }
 

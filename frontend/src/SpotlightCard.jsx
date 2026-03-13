@@ -57,7 +57,7 @@ export default function SpotlightCard({ children, className = '', spotlightColor
           transition: 'background 0.1s ease'
         }}
       />
-      <div style={{ position: 'relative' }}>{children}</div>
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>{children}</div>
     </div>
   );
 }

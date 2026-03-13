@@ -1,6 +1,6 @@
 import ClickSpark from './ClickSpark';
 import Particles from './Particles';
-import SpotlightCard from './SpotlightCard';
+import ThreeAvatar from './ThreeAvatar';
 
 export default function AvatarPanel({ isSpeaking }) {
   return (
@@ -18,17 +18,9 @@ export default function AvatarPanel({ isSpeaking }) {
 
       <div className="avatar-spark-area">
         <ClickSpark sparkColor="#8bb4ff" sparkSize={8} sparkRadius={18} sparkCount={10} duration={500}>
-          <SpotlightCard className="avatar-card" spotlightColor="rgba(79, 142, 247, 0.3)">
-            <div className="avatar-face-wrap">
-              <div className="avatar-face">
-                <div className="avatar-eyes">
-                  <span />
-                  <span />
-                </div>
-                <div className="avatar-mouth" />
-              </div>
-            </div>
-          </SpotlightCard>
+          <div className="avatar-shell">
+            <ThreeAvatar isSpeaking={isSpeaking} />
+          </div>
         </ClickSpark>
       </div>
 
