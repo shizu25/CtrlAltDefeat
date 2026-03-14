@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url(''https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap'');
 
 :root {
   --bg: #06080f;
@@ -217,45 +217,6 @@ body {
   align-items: center;
   justify-content: center;
   box-shadow: var(--float-shadow);
-}
-
-.avatar-card--3d {
-  padding: 0;
-}
-
-.avatar-shell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  overflow: hidden;
-}
-
-.avatar-3d-host {
-  position: absolute;
-  inset: 0;
-}
-
-.avatar-3d-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.avatar-3d-status {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  padding: 6px 10px;
-  border: 1px solid rgba(79, 142, 247, 0.22);
-  border-radius: 999px;
-  background: rgba(8, 15, 24, 0.74);
-  color: var(--muted);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  z-index: 2;
-  backdrop-filter: blur(12px);
 }
 
 .avatar-face-wrap {
@@ -759,11 +720,6 @@ body {
 }
 
 .voice-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.voice-btn.disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }

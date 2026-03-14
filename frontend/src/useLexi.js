@@ -104,6 +104,32 @@ function isCorrect(reply) {
   );
 }
 
+function getSpeechErrorMessage(errorCode) {
+  switch (errorCode) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return 'Microphone permission is blocked. Allow mic access for this site, then try again.';
+    case 'audio-capture':
+      return 'No microphone was detected. Connect a mic and try again.';
+    case 'network':
+      return 'Voice recognition hit a network issue. Check internet and retry.';
+    case 'language-not-supported':
+      return 'This speech recognition language is not supported in your browser.';
+    case 'aborted':
+      return '';
+    case 'no-speech':
+      return "I couldn't hear anything clearly. Try speaking a bit closer to the mic.";
+    default:
+      return errorCode ? `Voice input error: ${errorCode}` : '';
+  }
+}
+
+function normalizeTranscriptText(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function useLexi() {
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://127.0.0.1:11434');
   const [ollamaModel, setOllamaModel] = useState('qwen2.5:7b');
@@ -135,6 +161,10 @@ export function useLexi() {
   const pendingTranscriptRef = useRef('');
   const voiceHadResultRef = useRef(false);
   const lastVoiceErrorRef = useRef('');
+  const manualVoiceStopRef = useRef(false);
+  const finalTranscriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const confidenceSamplesRef = useRef([]);
   const activeRequestControllerRef = useRef(null);
   const conversationHistoryRef = useRef([]);
 
@@ -852,7 +882,7 @@ ${clipped}
     refreshReadyStatus();
   }, [addMessage, refreshReadyStatus, stopSpeaking]);
 
-  const toggleVoice = useCallback(() => {
+  const toggleVoice = useCallback(async () => {
     const recognition = recognitionRef.current;
     if (!recognition) {
       addMessage('lexi', 'Voice input is not supported in this browser.');
@@ -860,15 +890,42 @@ ${clipped}
     }
 
     if (runtimeRef.current.isListening) {
+      manualVoiceStopRef.current = true;
       recognition.stop();
       return;
     }
 
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      addMessage('lexi', 'Voice input requires a secure origin. Open Lexi on https:// or localhost/127.0.0.1.');
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+      } catch (error) {
+        const code = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError' ? 'not-allowed' : 'audio-capture';
+        const msg = getSpeechErrorMessage(code) || 'Microphone access failed.';
+        addMessage('lexi', msg);
+        refreshReadyStatus();
+        return;
+      }
+    }
+
     stopSpeaking();
     try {
+      manualVoiceStopRef.current = false;
+      pendingTranscriptRef.current = '';
+      voiceHadResultRef.current = false;
+      lastVoiceErrorRef.current = '';
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      confidenceSamplesRef.current = [];
       recognition.start();
     } catch (error) {
-      addMessage('lexi', `Microphone could not start: ${error?.message || 'Unknown error'}`);
+      const msg = getSpeechErrorMessage(error?.name) || `Microphone could not start: ${error?.message || 'Unknown error'}`;
+      addMessage('lexi', msg);
       refreshReadyStatus();
     }
   }, [addMessage, refreshReadyStatus, stopSpeaking]);
@@ -885,35 +942,65 @@ ${clipped}
     const recognition = new SpeechRec();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3;
     recognition.lang = navigator.language && navigator.language.startsWith('en') ? navigator.language : 'en-US';
     recognitionRef.current = recognition;
     setVoiceSupported(true);
+
+    const pickBestAlternative = result => {
+      let bestAlt = result?.[0] || null;
+      if (!bestAlt) return { transcript: '', confidence: null };
+
+      for (let i = 1; i < result.length; i += 1) {
+        const candidate = result[i];
+        const candidateConfidence = Number(candidate?.confidence || 0);
+        const bestConfidence = Number(bestAlt?.confidence || 0);
+        if (candidateConfidence > bestConfidence) {
+          bestAlt = candidate;
+        }
+      }
+
+      const transcript = normalizeTranscriptText(bestAlt?.transcript || '');
+      const confidence = Number.isFinite(bestAlt?.confidence) ? Number(bestAlt.confidence) : null;
+      return { transcript, confidence };
+    };
 
     recognition.onstart = () => {
       pendingTranscriptRef.current = '';
       voiceHadResultRef.current = false;
       lastVoiceErrorRef.current = '';
+      manualVoiceStopRef.current = false;
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      confidenceSamplesRef.current = [];
       setIsListening(true);
       setStatusText('LISTENING...');
     };
 
     recognition.onresult = event => {
-      let finalText = '';
-      let interimText = '';
+      let finalChunk = '';
+      let interimChunk = '';
 
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0]?.transcript?.trim() || '';
+        const { transcript, confidence } = pickBestAlternative(event.results[i]);
         if (!transcript) continue;
 
         if (event.results[i].isFinal) {
-          finalText += `${finalText ? ' ' : ''}${transcript}`;
+          finalChunk += `${finalChunk ? ' ' : ''}${transcript}`;
+          if (typeof confidence === 'number' && confidence > 0) {
+            confidenceSamplesRef.current.push(confidence);
+          }
         } else {
-          interimText += `${interimText ? ' ' : ''}${transcript}`;
+          interimChunk += `${interimChunk ? ' ' : ''}${transcript}`;
         }
       }
 
-      const combined = (finalText || interimText).trim();
+      if (finalChunk) {
+        finalTranscriptRef.current = normalizeTranscriptText(`${finalTranscriptRef.current} ${finalChunk}`);
+      }
+      interimTranscriptRef.current = normalizeTranscriptText(interimChunk);
+
+      const combined = normalizeTranscriptText(`${finalTranscriptRef.current} ${interimTranscriptRef.current}`);
       if (!combined) return;
 
       pendingTranscriptRef.current = combined;
@@ -928,24 +1015,36 @@ ${clipped}
     recognition.onend = () => {
       setIsListening(false);
 
-      const transcript = pendingTranscriptRef.current;
+      const transcript = normalizeTranscriptText(finalTranscriptRef.current || pendingTranscriptRef.current);
       const hadResult = voiceHadResultRef.current;
       const voiceError = lastVoiceErrorRef.current;
+      const wasManualStop = manualVoiceStopRef.current;
+      const confidenceValues = confidenceSamplesRef.current;
+      const avgConfidence = confidenceValues.length
+        ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+        : null;
 
       if (transcript) {
         setInputValue(transcript);
-        if (!runtimeRef.current.isLoading) {
+        if (avgConfidence !== null && avgConfidence < 0.58) {
+          addMessage('lexi', `I heard: "${transcript}". If this looks right, tap Send. If not, try again a bit slower.`);
+        } else if (!runtimeRef.current.isLoading) {
           sendMessageRef.current(transcript);
         }
-      } else if (voiceError === 'no-speech') {
-        addMessage('lexi', "I couldn't hear anything clearly. Try speaking a bit closer to the mic.");
-      } else if (!hadResult && !voiceError) {
+      } else if (!wasManualStop && voiceError) {
+        const msg = getSpeechErrorMessage(voiceError);
+        if (msg) addMessage('lexi', msg);
+      } else if (!wasManualStop && !hadResult && !voiceError) {
         addMessage('lexi', 'I did not catch that. Please try again.');
       }
 
       pendingTranscriptRef.current = '';
       voiceHadResultRef.current = false;
       lastVoiceErrorRef.current = '';
+      manualVoiceStopRef.current = false;
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      confidenceSamplesRef.current = [];
 
       refreshReadyStatus();
     };

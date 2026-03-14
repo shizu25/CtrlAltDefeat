@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lexi — Your AI Study Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <style>
+    :root {
+      --bg: #06080f;
+      --surface: #0d1117;
+      --border: #1a2030;
+      --accent: #4f8ef7;
+      --accent2: #a78bfa;
+      --accent3: #34d399;
+      --text: #e8edf5;
+      --muted: #4a5568;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      height: 100vh; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .header {
+      z-index: 10; display: flex; align-items: center;
+      justify-content: space-between; padding: 13px 26px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(13,17,23,0.92); backdrop-filter: blur(12px);
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand-dot {
+      width:10px; height:10px; background: var(--accent3);
+      border-radius:50%; box-shadow: 0 0 12px var(--accent3);
+      animation: pdot 2s ease-in-out infinite;
+    }
+    @keyframes pdot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.4);opacity:0.6} }
+    .brand-name {
+      font-size:22px; font-weight:800; letter-spacing:-0.02em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      background-clip:text;
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    }
+    .brand-tag { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; }
+    .header-right { display:flex; align-items:center; gap:10px; }
+    .status-pill {
+      display:flex; align-items:center; gap:7px; padding:6px 14px;
+      background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.2);
+      border-radius:100px; font-size:12px; color:var(--accent3);
+      font-family:'JetBrains Mono',monospace; letter-spacing:0.05em; min-width:130px; justify-content:center;
+    }
+    .status-dot { width:6px; height:6px; background:var(--accent3); border-radius:50%; }
+    .settings-btn {
+      background:transparent; border: 1px solid var(--border); color:var(--muted);
+      width:36px; height:36px; border-radius:10px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; transition:all 0.2s;
+    }
+    .settings-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .main { flex:1; display:grid; grid-template-columns:1fr 420px; overflow:hidden; }
+    .avatar-panel {
+      position:relative; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; overflow:hidden;
+      background: radial-gradient(ellipse at center, #091420 0%, var(--bg) 70%);
+    }
+    .avatar-panel::before {
+      content:''; position:absolute; bottom:0; left:0; right:0; height:45%;
+      background-image: linear-gradient(rgba(79,142,247,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(79,142,247,0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+      pointer-events:none;
+    }
+    #avatar-canvas { position:relative; z-index:1; cursor:pointer; display:block; }
+    .avatar-label {
+      position:absolute; bottom:22px; left:50%; transform:translateX(-50%);
+      font-family:'JetBrains Mono',monospace; font-size:11px;
+      letter-spacing:0.18em; color:var(--muted); z-index:2; white-space:nowrap;
+    }
+    .speaking-waves {
+      position:absolute; bottom:48px; left:50%; transform:translateX(-50%);
+      display:flex; gap:4px; align-items:flex-end; height:24px;
+      z-index:2; opacity:0; transition:opacity 0.3s;
+    }
+    .speaking-waves.active { opacity:1; }
+    .speaking-waves span {
+      display:block; width:3px;
+      background: linear-gradient(to top, var(--accent), var(--accent2));
+      border-radius:2px; animation: wbar 0.7s ease-in-out infinite;
+    }
+    .speaking-waves span:nth-child(1){height:8px}
+    .speaking-waves span:nth-child(2){height:16px;animation-delay:0.1s}
+    .speaking-waves span:nth-child(3){height:24px;animation-delay:0.2s}
+    .speaking-waves span:nth-child(4){height:16px;animation-delay:0.3s}
+    .speaking-waves span:nth-child(5){height:8px;animation-delay:0.4s}
+    @keyframes wbar { 0%,100%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} }
+    .anim-hint {
+      position:absolute; top:18px; left:50%; transform:translateX(-50%);
+      font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted);
+      letter-spacing:0.08em; z-index:2; opacity:0; transition:opacity 0.5s; pointer-events:none;
+      background: rgba(13,17,23,0.8); padding: 6px 14px; border-radius:100px; border: 1px solid var(--border);
+    }
+    .anim-hint.show { opacity:1; }
+    .loading-overlay {
+      position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      background:var(--bg); z-index:10; gap:16px; transition:opacity 0.6s;
+    }
+    .loading-overlay.hidden { opacity:0; pointer-events:none; }
+    .loader-ring {
+      width:48px; height:48px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius:50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .loader-text { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted); letter-spacing:0.1em; }
+    /* Chat Panel */
+    .chat-panel {
+      display:flex; flex-direction:column;
+      border-left: 1px solid var(--border); background:var(--surface); overflow:hidden;
+    }
+    .chat-top {
+      padding:13px 18px; border-bottom: 1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between; flex-shrink:0;
+    }
+    .chat-title { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.1em; margin-bottom:4px; }
+    .topic-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.2);
+      color:var(--accent); padding:3px 10px; border-radius:100px;
+      font-size:11px; font-family:'JetBrains Mono',monospace; transition: all 0.3s;
+    }
+    .msg-count { font-size:11px; color:var(--muted); font-family:'JetBrains Mono',monospace; }
+    .messages {
+      flex:1; overflow-y:auto; padding:18px;
+      display:flex; flex-direction:column; gap:14px;
+      scrollbar-width:thin; scrollbar-color: var(--border) transparent;
+    }
+    .messages::-webkit-scrollbar{width:3px}
+    .messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    .message { display:flex; flex-direction:column; gap:4px; animation: msgin 0.25s ease forwards; }
+    @keyframes msgin { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .message.user{align-items:flex-end}
+    .message.lexi{align-items:flex-start}
+    .msg-label { font-size:10px; color:var(--muted); font-family:'JetBrains Mono',monospace; letter-spacing:0.08em; padding:0 4px; }
+    .msg-bubble { max-width:90%; padding:11px 15px; border-radius:16px; font-size:14px; line-height:1.65; }
+    .message.user .msg-bubble { background: linear-gradient(135deg,var(--accent),#3b6fd4); color:#fff; border-bottom-right-radius:4px; }
+    .message.lexi .msg-bubble { background:rgba(255,255,255,0.04); border: 1px solid var(--border); color:var(--text); border-bottom-left-radius:4px; }
+    .thinking-bubble {
+      display:flex; gap:5px; align-items:center; padding:14px 18px;
+      background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:16px; border-bottom-left-radius:4px;
+    }
+    .thinking-bubble span {
+      display:block; width:7px; height:7px; background:var(--accent2);
+      border-radius:50%; animation: thnk 1.2s ease-in-out infinite;
+    }
+    .thinking-bubble span:nth-child(2){animation-delay:0.2s}
+    .thinking-bubble span:nth-child(3){animation-delay:0.4s}
+    @keyframes thnk { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+    .input-area { padding:13px 18px; border-top: 1px solid var(--border); display:flex; flex-direction:column; gap:9px; flex-shrink:0; }
+    .quick-prompts { display:flex; gap:5px; flex-wrap:wrap; }
+    .quick-btn {
+      background:transparent; border: 1px solid var(--border); color:var(--muted);
+      font-family:'Outfit',sans-serif; font-size:11px; padding:4px 10px;
+      border-radius:100px; cursor:pointer; transition:all 0.2s; white-space:nowrap;
+    }
+    .quick-btn:hover { border-color:var(--accent); color:var(--accent); background:rgba(79,142,247,0.06); }
+    .input-row { display:flex; gap:8px; align-items:flex-end; }
+    .chat-input {
+      flex:1; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:12px; color:var(--text); font-family:'Outfit',sans-serif;
+      font-size:14px; padding:11px 15px; resize:none; outline:none;
+      line-height:1.5; max-height:100px; transition:border-color 0.2s;
+    }
+    .chat-input:focus{border-color:var(--accent)}
+    .chat-input::placeholder{color:var(--muted)}
+    .send-btn {
+      width:42px; height:42px; background:var(--accent); border:none;
+      border-radius:12px; cursor:pointer; display:flex; align-items:center;
+      justify-content:center; flex-shrink:0; transition:all 0.2s; color:white;
+    }
+    .send-btn:hover{background:#6ba3ff;transform:translateY(-1px)}
+    .send-btn:disabled{background:var(--border);cursor:not-allowed;transform:none}
+    .voice-btn {
+      width:42px; height:42px; background:rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.3); border-radius:12px; cursor:pointer;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; transition:all 0.2s; color:var(--accent2);
+    }
+    .voice-btn:hover{background:rgba(167,139,250,0.2)}
+    .voice-btn.listening{background:rgba(167,139,250,0.25);border-color:var(--accent2);animation:micpulse 1.5s ease-in-out infinite}
+    @keyframes micpulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,0.4)}50%{box-shadow:0 0 0 8px rgba(167,139,250,0)}}
+    /* Modal */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.9); backdrop-filter:blur(12px);
+      z-index:200; display:flex; align-items:center; justify-content:center;
+    }
+    .modal {
+      background:var(--surface); border: 1px solid var(--border); border-radius:20px;
+      padding:36px; width:min(450px,92vw); box-shadow: 0 40px 80px rgba(0,0,0,0.8);
+    }
+    .modal-icon{font-size:44px;margin-bottom:14px;display:block}
+    .modal h2{font-size:22px;font-weight:800;margin-bottom:10px;letter-spacing:-0.02em}
+    .modal p{color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:20px}
+    .modal p a{color:var(--accent);text-decoration:none}
+    .modal p a:hover{text-decoration:underline}
+    .modal p code{background:rgba(79,142,247,0.1);color:var(--accent);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px}
+    .modal-input {
+      width:100%; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:10px; color:var(--text); font-family:'JetBrains Mono',monospace;
+      font-size:13px; padding:12px 14px; outline:none; margin-bottom:8px; transition:border-color 0.2s;
+    }
+    .modal-input:focus{border-color:var(--accent)}
+    .modal-error{font-size:12px;color:#f87171;margin-bottom:10px;font-family:'JetBrains Mono',monospace;display:none}
+    .modal-error.show{display:block}
+    .modal-btn {
+      width:100%; padding:13px; background:var(--accent); border:none; border-radius:10px;
+      color:#fff; font-family:'Outfit',sans-serif; font-size:14px; font-weight:600; cursor:pointer; transition:background 0.2s;
+    }
+    .modal-btn:hover{background:#6ba3ff}
+    .modal-skip{display:block;text-align:center;margin-top:12px;font-size:12px;color:var(--muted);cursor:pointer;font-family:'JetBrains Mono',monospace;letter-spacing:0.05em}
+    .modal-skip:hover{color:var(--text)}
+    /* Settings */
+    .settings-panel {
+      position:fixed; top:58px; right:18px;
+      background:var(--surface); border: 1px solid var(--border);
+      border-radius:14px; padding:18px; width:290px;
+      z-index:100; box-shadow: 0 20px 40px rgba(0,0,0,0.6); display:none;
+    }
+    .settings-panel.show{display:block}
+    .settings-title{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:0.15em;margin-bottom:12px}
+    .settings-input {
+      width:100%; background:rgba(255,255,255,0.04); border: 1px solid var(--border);
+      border-radius:8px; color:var(--text); font-family:'JetBrains Mono',monospace;
+      font-size:12px; padding:9px 12px; outline:none; margin-bottom:8px; transition:border-color 0.2s;
+    }
+    .settings-input:focus{border-color:var(--accent)}
+    .settings-save {
+      width:100%; padding:9px; background:var(--accent); border:none; border-radius:8px;
+      color:#fff; font-size:12px; font-weight:600; font-family:'JetBrains Mono',monospace;
+      cursor:pointer; letter-spacing:0.05em; transition:background 0.2s;
+    }
+    .settings-save:hover{background:#6ba3ff}
+  </style>
+</head>
+<body>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <span class="modal-icon">🤖</span>
+    <h2>Wake up Lexi!</h2>
+    <p>
+      Lexi needs a free <strong>Google Gemini API key</strong> to come alive.<br><br>
+      1️⃣ Go to <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a><br>
+      2️⃣ Click <strong>Get API Key → Create API Key</strong><br>
+      3️⃣ Paste below — it starts with <code>AIza...</code>
+    </p>
+    <input class="modal-input" id="api-key-input" type="password" placeholder="AIza..." autocomplete="off"/>
+    <div class="modal-error" id="modal-error">⚠ Invalid key — should start with AIza and be 39+ chars</div>
+    <button class="modal-btn" id="api-key-save">Let's go →</button>
+    <span class="modal-skip" id="modal-skip">Skip — use demo mode</span>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-title">UPDATE API KEY</div>
+  <input class="settings-input" id="settings-key" type="password" placeholder="AIza..." />
+  <button class="settings-save" id="settings-save">Save & Test</button>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-dot"></div>
+    <div>
+      <div class="brand-name">Lexi</div>
+      <div class="brand-tag">AI STUDY COMPANION</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span id="status-text">LOADING...</span>
+    </div>
+    <button class="settings-btn" id="settings-btn" title="Update API Key">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="main">
+  <div class="avatar-panel">
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="loader-ring"></div>
+      <div class="loader-text" id="loader-text">LOADING LEXI...</div>
+    </div>
+    <div class="anim-hint" id="anim-hint">👆 click lexi to wave!</div>
+    <canvas id="avatar-canvas"></canvas>
+    <div class="speaking-waves" id="speaking-waves">
+      <span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="avatar-label">LEXI v1.0 — AI STUDY COMPANION</div>
+  </div>
+
+  <div class="chat-panel">
+    <div class="chat-top">
+      <div>
+        <div class="chat-title">CONVERSATION</div>
+        <div class="topic-badge" id="topic-badge">📚 General</div>
+      </div>
+      <div class="msg-count" id="msg-count">0 msgs</div>
+    </div>
+    <div class="messages" id="messages">
+      <div class="message lexi">
+        <div class="msg-label">LEXI</div>
+        <div class="msg-bubble">Hey! I'm Lexi, your AI study companion 👋 Ask me anything — I can explain concepts, quiz you, help with homework, or just chat. What are we learning today?</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="quick-prompts">
+        <button class="quick-btn" onclick="quickSend('Explain photosynthesis simply')">🌱 Photosynthesis</button>
+        <button class="quick-btn" onclick="quickSend('Quiz me on World War 2')">🎯 WW2 Quiz</button>
+        <button class="quick-btn" onclick="quickSend('How does Newton third law work?')">⚡ Physics</button>
+        <button class="quick-btn" onclick="quickSend('Help me with quadratic equations')">➗ Maths</button>
+        <button class="quick-btn" onclick="quickSend('Tell me something amazing about space')">🚀 Space</button>
+      </div>
+      <div class="input-row">
+        <button class="voice-btn" id="voice-btn" title="Voice input">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <textarea class="chat-input" id="chat-input" rows="1" placeholder="Ask Lexi anything..." onkeydown="handleKey(event)"></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ─────────────────────────────────────────────────────────────────
+let GEMINI_KEY = '';
+let isLoading = false;
+let isSpeakingNow = false;
+let isListening = false;
+let msgCount = 0;
+let conversationHistory = [];
+let mixer = null;
+let animations = {};
+let currentAction = null;
+let modelLoaded = false;
+let clock = new THREE.Clock();
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+document.getElementById('api-key-save').onclick = () => {
+  const key = document.getElementById('api-key-input').value.trim();
+  const err = document.getElementById('modal-error');
+  if (!key.startsWith('AIza') || key.length < 30) {
+    err.classList.add('show'); return;
+  }
+  err.classList.remove('show');
+  GEMINI_KEY = key;
+  document.getElementById('modal').style.display = 'none';
+  setStatus('READY');
+};
+
+document.getElementById('modal-skip').onclick = () => {
+  document.getElementById('modal').style.display = 'none';
+  setStatus('DEMO MODE');
+};
+
+document.getElementById('api-key-input').onkeydown = e => {
+  if (e.key === 'Enter') document.getElementById('api-key-save').click();
+};
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+document.getElementById('settings-btn').onclick = e => {
+  e.stopPropagation();
+  document.getElementById('settings-panel').classList.toggle('show');
+};
+document.addEventListener('click', () => document.getElementById('settings-panel').classList.remove('show'));
+
+document.getElementById('settings-save').onclick = async () => {
+  const key = document.getElementById('settings-key').value.trim();
+  if (!key.startsWith('AIza') || key.length < 30) {
+    document.getElementById('settings-save').textContent = '⚠ Invalid format';
+    setTimeout(() => document.getElementById('settings-save').textContent = 'Save & Test', 2000);
+    return;
+  }
+  GEMINI_KEY = key;
+  document.getElementById('settings-save').textContent = 'Testing...';
+  const ok = await testKey();
+  document.getElementById('settings-save').textContent = ok ? '✓ Key works!' : '✗ Key rejected by Gemini';
+  if (ok) setStatus('READY');
+  setTimeout(() => {
+    document.getElementById('settings-save').textContent = 'Save & Test';
+    if (ok) document.getElementById('settings-panel').classList.remove('show');
+  }, 2500);
+};
+
+async function testKey() {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'Say OK' }] }], generationConfig: { maxOutputTokens: 5 } })
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+// ─── Three.js ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('avatar-canvas');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 1.2, 4.5);
+camera.lookAt(0, 1, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+function resizeAvatar() {
+  const p = canvas.parentElement;
+  renderer.setSize(p.clientWidth, p.clientHeight);
+  camera.aspect = p.clientWidth / p.clientHeight;
+  camera.updateProjectionMatrix();
+}
+resizeAvatar();
+window.addEventListener('resize', resizeAvatar);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const keyLight = new THREE.DirectionalLight(0x8ab4f8, 1.8);
+keyLight.position.set(3, 5, 4); keyLight.castShadow = true; scene.add(keyLight);
+const fillLight = new THREE.PointLight(0xa78bfa, 1.2, 12);
+fillLight.position.set(-4, 2, 2); scene.add(fillLight);
+const rimLight = new THREE.PointLight(0x34d399, 0.7, 10);
+rimLight.position.set(0, 5, -4); scene.add(rimLight);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(8, 8),
+  new THREE.MeshStandardMaterial({ color: 0x080e1a, transparent: true, opacity: 0.6 })
+);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+// ── Load model ──
+const loader = new THREE.GLTFLoader();
+loader.load(
+  'https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb',
+  gltf => {
+    const model = gltf.scene;
+    model.scale.set(0.9, 0.9, 0.9);
+    model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    scene.add(model);
+
+    mixer = new THREE.AnimationMixer(model);
+    gltf.animations.forEach(clip => { animations[clip.name] = mixer.clipAction(clip); });
+
+    console.log('[Lexi] Animations:', Object.keys(animations));
+    playAnimation('Idle', true);
+
+    modelLoaded = true;
+    document.getElementById('loading-overlay').classList.add('hidden');
+    setStatus(GEMINI_KEY ? 'READY' : 'DEMO MODE');
+
+    setTimeout(() => {
+      const hint = document.getElementById('anim-hint');
+      hint.classList.add('show');
+      setTimeout(() => hint.classList.remove('show'), 3500);
+    }, 1500);
+  },
+  xhr => {
+    if (xhr.total) {
+      document.getElementById('loader-text').textContent =
+        `LOADING LEXI... ${Math.round(xhr.loaded/xhr.total*100)}%`;
+    }
+  },
+  err => {
+    console.error('[Lexi] Load error:', err);
+    document.getElementById('loading-overlay').classList.add('hidden');
+    buildFallback();
+    modelLoaded = true;
+    setStatus(GEMINI_KEY ? 'READY' : 'DEMO MODE');
+  }
+);
+
+function buildFallback() {
+  const g = new THREE.Group();
+
+  // Head
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x1a2f50, metalness: 0.8, roughness: 0.15 });
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.7,0.7,0.65), headMat);
+  head.position.y = 1.65; head.castShadow = true; g.add(head);
+
+  // Face visor
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x0a1525, metalness: 0.1, roughness: 0.05, transparent: true, opacity: 0.9 });
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.55,0.35,0.05), visorMat);
+  visor.position.set(0,1.68,0.35); g.add(visor);
+
+  // Eyes (glowing)
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x4f8ef7, emissive: 0x4f8ef7, emissiveIntensity: 3 });
+  const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.12,0.06,0.02), eyeMat);
+  eye1.position.set(-0.14,1.72,0.38); g.add(eye1);
+  const eye2 = eye1.clone(); eye2.position.x = 0.14; g.add(eye2);
+
+  // Mouth
+  const mouthMat = new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x34d399, emissiveIntensity: 2 });
+  for (let i = 0; i < 4; i++) {
+    const dot = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.04,0.02), mouthMat);
+    dot.position.set(-0.09 + i*0.06, 1.57, 0.38); g.add(dot);
+  }
+
+  // Antenna
+  const antMat = new THREE.MeshStandardMaterial({ color: 0xa78bfa, metalness: 0.9, roughness: 0.1 });
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.35,8), antMat);
+  ant.position.set(0,2.18,0); g.add(ant);
+  const antBall = new THREE.Mesh(new THREE.SphereGeometry(0.07,16,16),
+    new THREE.MeshStandardMaterial({ color: 0xa78bfa, emissive: 0xa78bfa, emissiveIntensity: 3 }));
+  antBall.position.set(0,2.38,0); g.add(antBall);
+
+  // Body
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x152035, metalness: 0.7, roughness: 0.2 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.95,0.55), bodyMat);
+  body.position.y = 0.9; body.castShadow = true; g.add(body);
+
+  // Chest light
+  const chestLight = new THREE.Mesh(new THREE.BoxGeometry(0.3,0.18,0.05),
+    new THREE.MeshStandardMaterial({ color: 0x4f8ef7, emissive: 0x4f8ef7, emissiveIntensity: 1 }));
+  chestLight.position.set(0,0.95,0.3); g.add(chestLight);
+
+  // Arms
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1a2f50, metalness: 0.7, roughness: 0.2 });
+  [-1,1].forEach(side => {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.09,0.65,12), armMat);
+    arm.position.set(side*0.55, 0.85, 0); arm.rotation.z = side * 0.15;
+    arm.castShadow = true; g.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.11,12,12), armMat);
+    hand.position.set(side*0.62, 0.52, 0); g.add(hand);
+  });
+
+  // Legs
+  [-1,1].forEach(side => {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.1,0.6,12), armMat);
+    leg.position.set(side*0.22, 0.3, 0); leg.castShadow = true; g.add(leg);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.22,0.12,0.35), armMat);
+    foot.position.set(side*0.22, -0.02, 0.05); g.add(foot);
+  });
+
+  scene.add(g);
+
+  // Animate fallback with bob + sway
+  let t = 0;
+  mixer = {
+    update: dt => {
+      t += dt;
+      g.position.y = Math.sin(t * 0.9) * 0.06;
+      g.rotation.y = Math.sin(t * 0.4) * 0.08;
+      // Pulse eyes
+      eyeMat.emissiveIntensity = 2 + Math.sin(t * 2) * 1;
+      antBall.material.emissiveIntensity = 2 + Math.sin(t * 3) * 1.5;
+      chestLight.material.emissiveIntensity = 0.8 + Math.sin(t * 4) * 0.6;
+    }
+  };
+  animations = {};
+  modelLoaded = true;
+  document.getElementById('loading-overlay').classList.add('hidden');
+  setStatus(GEMINI_KEY ? 'READY' : 'DEMO MODE');
+}
+
+// ── Animation controller ──
+function playAnimation(name, loop = false, onDone = null) {
+  const fallbackMap = { 'Dance': 'Running', 'Nod': 'Yes', 'Wave': 'Wave', 'Idle': 'Idle', 'Yes': 'Yes' };
+  const target = animations[name] ? name : (fallbackMap[name] && animations[fallbackMap[name]] ? fallbackMap[name] : null);
+  if (!target) return;
+
+  const next = animations[target];
+  if (currentAction && currentAction !== next) currentAction.fadeOut(0.25);
+
+  next.reset();
+  next.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+  next.clampWhenFinished = !loop;
+  next.fadeIn(0.25).play();
+  currentAction = next;
+
+  if (!loop && onDone) {
+    const handler = () => { onDone(); mixer.removeEventListener('finished', handler); };
+    mixer.addEventListener('finished', handler);
+  }
+}
+
+function playThenIdle(name) {
+  playAnimation(name, false, () => setTimeout(() => playAnimation('Idle', true), 150));
+}
+
+canvas.onclick = () => { if (modelLoaded) playThenIdle('Wave'); };
+
+// ── Render loop ──
+(function animate() {
+  requestAnimationFrame(animate);
+  if (mixer) mixer.update(clock.getDelta());
+  renderer.render(scene, camera);
+})();
+
+// ─── Gemini ───────────────────────────────────────────────────────────────────
+const SYSTEM = `You are Lexi, a friendly AI study companion for students.
+- Keep responses SHORT (2-4 sentences) unless explaining something complex
+- Use simple language with real-world analogies  
+- Be warm and encouraging, use emojis naturally
+- Celebrate correct answers with phrases like "That's correct!" or "Perfect!"
+- Always end with a short follow-up question or encouragement`;
+
+async function askGemini(msg) {
+  if (!GEMINI_KEY) return getDemoReply(msg);
+
+  conversationHistory.push({ role: 'user', parts: [{ text: msg }] });
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: SYSTEM }] },
+          contents: conversationHistory,
+          generationConfig: { temperature: 0.8, maxOutputTokens: 350 }
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reply) throw new Error('Empty response');
+
+    conversationHistory.push({ role: 'model', parts: [{ text: reply }] });
+    return reply;
+
+  } catch (err) {
+    conversationHistory.pop();
+    console.error('[Gemini]', err.message);
+    if (err.message.includes('API_KEY_INVALID') || err.message.includes('400'))
+      return "❌ API key issue! Click ⚙️ in the header to update your key. Get one free at aistudio.google.com";
+    if (err.message.includes('429'))
+      return "⏳ Too many requests! Give me a few seconds and try again.";
+    return `Something went wrong: ${err.message}. Try clicking ⚙️ to check your API key.`;
+  }
+}
+
+function getDemoReply(msg) {
+  const m = msg.toLowerCase();
+  if (/\b(hi|hello|hey)\b/.test(m)) return "Hey! 👋 I'm Lexi! I'm running in demo mode — add a Gemini API key to unlock my full brain!";
+  if (m.includes('quiz')) return "I'd love to quiz you! 🎯 Click ⚙️ and add a free Gemini key from aistudio.google.com first.";
+  return "I'm in demo mode 🤖 Get a free Gemini API key at aistudio.google.com and click ⚙️ to add it!";
+}
+
+// ─── TTS ─────────────────────────────────────────────────────────────────────
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const clean = text.replace(/[*_`#>]/g,'').replace(/\n+/g,' ').trim();
+  const utter = new SpeechSynthesisUtterance(clean);
+  utter.rate = 1.0; utter.pitch = 1.1; utter.volume = 1;
+  const voices = window.speechSynthesis.getVoices();
+  const v = voices.find(v => v.name.includes('Google') && v.lang.startsWith('en'))
+         || voices.find(v => v.lang.startsWith('en-US')) || voices[0];
+  if (v) utter.voice = v;
+  utter.onstart = () => {
+    isSpeakingNow = true;
+    document.getElementById('speaking-waves').classList.add('active');
+    setStatus('SPEAKING');
+  };
+  utter.onend = utter.onerror = () => {
+    isSpeakingNow = false;
+    document.getElementById('speaking-waves').classList.remove('active');
+    setStatus('READY');
+  };
+  window.speechSynthesis.speak(utter);
+}
+window.speechSynthesis?.addEventListener('voiceschanged', () => {});
+
+// ─── Voice Input ──────────────────────────────────────────────────────────────
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+const voiceBtn = document.getElementById('voice-btn');
+
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.continuous = false; recognition.interimResults = false; recognition.lang = 'en-US';
+  recognition.onresult = e => {
+    document.getElementById('chat-input').value = e.results[0][0].transcript;
+    sendMessage();
+  };
+  recognition.onend = recognition.onerror = () => {
+    isListening = false; voiceBtn.classList.remove('listening');
+    if (!isSpeakingNow) setStatus('READY');
+  };
+} else {
+  voiceBtn.style.opacity = '0.3'; voiceBtn.title = 'Not supported in this browser';
+}
+
+voiceBtn.onclick = () => {
+  if (!recognition) return;
+  if (isListening) { recognition.stop(); return; }
+  window.speechSynthesis?.cancel();
+  isListening = true; voiceBtn.classList.add('listening'); setStatus('LISTENING...');
+  recognition.start();
+};
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+function setStatus(t) { document.getElementById('status-text').textContent = t; }
+
+function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+
+function quickSend(text) { document.getElementById('chat-input').value = text; sendMessage(); }
+
+function addMsg(role, content, thinking = false) {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+  if (thinking) {
+    div.id = 'thinking-msg';
+    div.innerHTML = `<div class="msg-label">LEXI</div><div class="thinking-bubble"><span></span><span></span><span></span></div>`;
+  } else {
+    div.innerHTML = `<div class="msg-label">${role === 'user' ? 'YOU' : 'LEXI'}</div><div class="msg-bubble">${content}</div>`;
+  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function detectTopic(t) {
+  const map = {
+    '🔢 Mathematics': ['math','algebra','calculus','equation','geometry','trigonometry','quadratic','derivative'],
+    '🔬 Science': ['science','physics','chemistry','biology','atom','cell','force','energy','photosynthesis'],
+    '📜 History': ['history','war','century','ancient','empire','revolution','civilization'],
+    '📖 Literature': ['poem','novel','shakespeare','literature','essay','story','author'],
+    '💻 Coding': ['code','programming','algorithm','python','javascript','function','loop'],
+    '🌍 Geography': ['country','continent','capital','ocean','mountain','river','geography'],
+    '🚀 Space': ['space','planet','star','galaxy','moon','solar','universe','asteroid'],
+  };
+  const low = t.toLowerCase();
+  for (const [topic, keys] of Object.entries(map))
+    if (keys.some(k => low.includes(k))) return topic;
+  return '📚 General';
+}
+
+function isCorrect(t) {
+  return ['correct','perfect','exactly','right','well done','great job','excellent','yes!','spot on','that\'s it'].some(p => t.toLowerCase().includes(p));
+}
+
+async function sendMessage() {
+  if (isLoading) return;
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+  window.speechSynthesis?.cancel();
+
+  addMsg('user', text);
+  msgCount++; document.getElementById('msg-count').textContent = `${msgCount} msgs`;
+  document.getElementById('topic-badge').textContent = detectTopic(text);
+
+  // Greeting → wave
+  if (modelLoaded && /\b(hi|hello|hey|sup)\b/i.test(text)) playThenIdle('Wave');
+
+  addMsg('lexi', '', true);
+  setStatus('THINKING...');
+
+  const reply = await askGemini(text);
+  document.getElementById('thinking-msg')?.remove();
+  addMsg('lexi', reply);
+  msgCount++; document.getElementById('msg-count').textContent = `${msgCount} msgs`;
+
+  // Correct answer → dance, else nod
+  if (modelLoaded) {
+    if (isCorrect(reply)) playThenIdle('Dance');
+    else playThenIdle('Yes');
+  }
+
+  speak(reply);
+  isLoading = false;
+  document.getElementById('send-btn').disabled = false;
+  input.focus();
+}
+</script>
+</body>
+</html>

@@ -55,11 +55,10 @@ export default function Composer({
 
       <div className="input-row">
         <button
-          className={`voice-btn ${isListening ? 'listening' : ''}`}
+          className={`voice-btn ${isListening ? 'listening' : ''} ${!voiceSupported ? 'disabled' : ''}`}
           type="button"
           title={voiceSupported ? 'Voice input' : 'Voice input unavailable'}
           onClick={onToggleVoice}
-          disabled={!voiceSupported}
         >
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
